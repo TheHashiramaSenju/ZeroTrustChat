@@ -1,68 +1,43 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
+import config from '../config/environment.js';
 import logger from '../utils/logger.js';
 
+const resend = new Resend(config.RESEND_API_KEY);
+
 class EmailService {
-    constructor() {
-        this.transporter = nodemailer.createTransport({
-            service: 'gmail',
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASSWORD,
-            },
-        });
-    }
+  static async sendOTPEmail(email, otp) {
+    try {
+      const { data, error } = await resend.emails.send({
+        from: 'ZeroTrust Chat <onboarding@resend.dev>',
+        to: email,
+        subject: 'Your ZeroTrust Chat Verification Code',
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #4F46E5;">ZeroTrust Chat</h2>
+            <p>Your verification code is:</p>
+            <div style="background: #F3F4F6; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
+              <h1 style="color: #1F2937; margin: 0; font-size: 36px; letter-spacing: 8px;">${otp}</h1>
+            </div>
+            <p style="color: #6B7280;">This code will expire in 10 minutes.</p>
+            <p style="color: #6B7280; font-size: 12px; margin-top: 30px;">
+              If you didn't request this code, please ignore this email.
+            </p>
+          </div>
+        `,
+      });
 
-    async sendOTPEmail(email, otp) {
-        const mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: email,
-            subject: 'ZeroTrust - Email Verification Code',
-            html: `
-                <div style="font-family: 'Courier New', monospace; background: #0f172a; color: #e2e8f0; padding: 40px; border: 2px solid #22c55e;">
-                    <div style="text-align: center; margin-bottom: 30px;">
-                        <h1 style="color: #22c55e; font-size: 28px; letter-spacing: 3px; margin: 0;">ZEROTRUST</h1>
-                        <p style="color: #64748b; font-size: 11px; margin: 5px 0; letter-spacing: 2px;">SECURE COMMUNICATIONS</p>
-                    </div>
-                    
-                    <div style="background: #1e293b; border: 1px solid #334155; padding: 40px; margin: 20px 0; text-align: center;">
-                        <div style="color: #22c55e; font-size: 11px; margin-bottom: 20px; letter-spacing: 1px;">
-                            <span style="display: inline-block; width: 8px; height: 8px; background: #22c55e; border-radius: 50%; margin-right: 8px; animation: pulse 2s infinite;"></span>
-                            EMAIL VERIFICATION
-                        </div>
-                        
-                        <p style="font-size: 14px; line-height: 1.8; margin: 25px 0; color: #cbd5e1;">
-                            Your verification code is:
-                        </p>
-                        
-                        <div style="background: #0f172a; border: 2px solid #22c55e; padding: 25px; margin: 30px auto; max-width: 300px;">
-                            <div style="font-size: 48px; font-weight: bold; letter-spacing: 10px; color: #22c55e; font-family: monospace;">
-                                ${otp}
-                            </div>
-                        </div>
-                        
-                        <p style="font-size: 12px; color: #64748b; margin: 25px 0;">
-                            This code expires in <span style="color: #22c55e; font-weight: bold;">10 minutes</span>
-                        </p>
-                    </div>
-                    
-                    <div style="text-align: center; margin-top: 30px; font-size: 11px; color: #475569; line-height: 1.6;">
-                        <p style="margin: 5px 0;">If you did not request this code, please ignore this email.</p>
-                        <p style="margin: 15px 0 5px 0; color: #334155; letter-spacing: 1px;">━━━━━━━━━━━━━━━━━━</p>
-                        <p style="margin: 5px 0; font-size: 10px;">ZEROTRUST//CHAT | ZERO TRUST ARCHITECTURE</p>
-                    </div>
-                </div>
-            `,
-        };
+      if (error) {
+        logger.error('Failed to send OTP email:', { error, email });
+        throw new Error(error.message || 'Failed to send email');
+      }
 
-        try {
-            await this.transporter.sendMail(mailOptions);
-            logger.info(`OTP email sent to ${email}`);
-            return { success: true };
-        } catch (error) {
-            logger.error('Failed to send OTP email:', error);
-            return { error };
-        }
+      logger.info('OTP email sent successfully', { email, messageId: data.id });
+      return { success: true, messageId: data.id };
+    } catch (error) {
+      logger.error('Email service error:', { error: error.message, email });
+      throw error;
     }
+  }
 }
 
-export default new EmailService();
+export default EmailService;

@@ -1,13 +1,12 @@
 import 'dotenv/config';
 
-// Helper function to clean environment variables
 const cleanEnvVar = (value, fallback = '') => {
   if (!value) return fallback;
   return String(value)
     .trim()
-    .replace(/^["'\[\]]+/, '')  // Remove leading quotes/brackets
-    .replace(/["'\[\]]+$/, '')  // Remove trailing quotes/brackets
-    .replace(/\\n/g, '');       // Remove escaped newlines
+    .replace(/^["'\[\]]+/, '')
+    .replace(/["'\[\]]+$/, '')
+    .replace(/\\n/g, '');
 };
 
 const config = {
@@ -20,8 +19,14 @@ const config = {
   DATABASE_URL: cleanEnvVar(process.env.DATABASE_URL),
   JWT_SECRET: cleanEnvVar(process.env.JWT_SECRET),
   JWT_REFRESH_SECRET: cleanEnvVar(process.env.JWT_REFRESH_SECRET),
+  
+  // Resend API Key (replaces Gmail SMTP)
+  RESEND_API_KEY: cleanEnvVar(process.env.RESEND_API_KEY),
+  
+  // Keep these for backward compatibility but not used anymore
   EMAIL_USER: cleanEnvVar(process.env.EMAIL_USER),
   EMAIL_PASSWORD: cleanEnvVar(process.env.EMAIL_PASSWORD),
+  
   SUPABASE_URL: cleanEnvVar(process.env.SUPABASE_URL),
   SUPABASE_KEY: cleanEnvVar(process.env.SUPABASE_KEY),
   GOOGLE_CLIENT_ID: cleanEnvVar(process.env.GOOGLE_CLIENT_ID, 'temp'),
@@ -29,7 +34,6 @@ const config = {
   GOOGLE_CALLBACK_URL: cleanEnvVar(process.env.GOOGLE_CALLBACK_URL),
 };
 
-// Debug log in production to verify
 if (config.NODE_ENV === 'production') {
   console.log('CORS_ORIGIN configured as:', config.CORS_ORIGIN);
 }
