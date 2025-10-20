@@ -1,30 +1,27 @@
-// Centralized security configurations.
-// Includes CORS policies, Helmet.js settings for HTTP headers, and CSP.
 import helmet from 'helmet';
 
-// Helmet configuration for production-grade security
 const securityMiddleware = helmet({
     contentSecurityPolicy: {
         useDefaults: true,
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'"], // Adjust based on your needs
+            scriptSrc: ["'self'", "'unsafe-inline'"],
             styleSrc: ["'self'", "'unsafe-inline'"],
             imgSrc: ["'self'", 'data:', 'https:'],
-            connectSrc: ["'self'", process.env.CORS_ORIGIN || 'http://localhost:5173'],
+            connectSrc: ["'self'", 'https://ztachat.vercel.app', 'https://zerotrust-backend.onrender.com'],
             fontSrc: ["'self'", 'https:', 'data:'],
             objectSrc: ["'none'"],
             mediaSrc: ["'self'"],
             frameSrc: ["'none'"],
         },
     },
-    crossOriginEmbedderPolicy: true,
-    crossOriginOpenerPolicy: { policy: 'same-origin' },
-    crossOriginResourcePolicy: { policy: 'same-origin' },
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
     dnsPrefetchControl: { allow: false },
     frameguard: { action: 'deny' },
     hsts: {
-        maxAge: 31536000, // 1 year
+        maxAge: 31536000,
         includeSubDomains: true,
         preload: true,
     },
@@ -35,4 +32,3 @@ const securityMiddleware = helmet({
 });
 
 export default securityMiddleware;
-
