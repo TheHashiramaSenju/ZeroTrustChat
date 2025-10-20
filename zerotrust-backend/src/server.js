@@ -3,7 +3,6 @@ import { createServer } from 'http';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import config from './config/environment.js';
-import securityMiddleware from './config/security.js';
 import { generalLimiter, authLimiter } from './middleware/rateLimiter.js';
 import { initializeSocket } from './socket.js';
 import logger from './utils/logger.js';
@@ -18,11 +17,17 @@ import globalErrorHandler from './middleware/globalErrorHandler.js';
 const app = express();
 const httpServer = createServer(app);
 
-// Enable trust proxy for Render/production deployment
+// Trust proxy for Render
 app.set('trust proxy', 1);
 
-app.use(securityMiddleware);
-app.use(cors({ origin: config.CORS_ORIGIN, credentials: true }));
+// CORS configuration
+app.use(cors({ 
+  origin: config.CORS_ORIGIN, 
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
