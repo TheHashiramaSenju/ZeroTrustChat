@@ -1,34 +1,17 @@
-import helmet from 'helmet';
+// Temporarily disabled helmet for debugging
 
-const securityMiddleware = helmet({
-    contentSecurityPolicy: {
-        useDefaults: true,
-        directives: {
-            defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'"],
-            styleSrc: ["'self'", "'unsafe-inline'"],
-            imgSrc: ["'self'", 'data:', 'https:'],
-            connectSrc: ["'self'", 'https://ztachat.vercel.app', 'https://zerotrust-backend.onrender.com'],
-            fontSrc: ["'self'", 'https:', 'data:'],
-            objectSrc: ["'none'"],
-            mediaSrc: ["'self'"],
-            frameSrc: ["'none'"],
-        },
-    },
-    crossOriginEmbedderPolicy: false,
-    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
-    dnsPrefetchControl: { allow: false },
-    frameguard: { action: 'deny' },
-    hsts: {
-        maxAge: 31536000,
-        includeSubDomains: true,
-        preload: true,
-    },
-    ieNoOpen: true,
-    noSniff: true,
-    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
-    xssFilter: true,
-});
+const securityMiddleware = (req, res, next) => {
+    // Allow all CORS for now
+    res.header('Access-Control-Allow-Origin', 'https://ztachat.vercel.app');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    
+    next();
+};
 
 export default securityMiddleware;
