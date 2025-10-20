@@ -1,30 +1,37 @@
 import 'dotenv/config';
 
+// Helper function to clean environment variables
+const cleanEnvVar = (value, fallback = '') => {
+  if (!value) return fallback;
+  return String(value)
+    .trim()
+    .replace(/^["'\[\]]+/, '')  // Remove leading quotes/brackets
+    .replace(/["'\[\]]+$/, '')  // Remove trailing quotes/brackets
+    .replace(/\\n/g, '');       // Remove escaped newlines
+};
+
 const config = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: parseInt(process.env.PORT || '4001', 10),
   
-  // Clean the CORS_ORIGIN - remove any quotes or brackets
-  CORS_ORIGIN: (process.env.CORS_ORIGIN || 'http://localhost:5173')
-    .trim()
-    .replace(/^["'\[]/, '')  // Remove leading quotes or brackets
-    .replace(/["'\]]$/, ''), // Remove trailing quotes or brackets
+  CORS_ORIGIN: cleanEnvVar(process.env.CORS_ORIGIN, 'http://localhost:5173'),
+  FRONTEND_URL: cleanEnvVar(process.env.FRONTEND_URL, 'http://localhost:5173'),
     
-  FRONTEND_URL: (process.env.FRONTEND_URL || 'http://localhost:5173')
-    .trim()
-    .replace(/^["'\[]/, '')
-    .replace(/["'\]]$/, ''),
-    
-  DATABASE_URL: process.env.DATABASE_URL,
-  JWT_SECRET: process.env.JWT_SECRET,
-  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET,
-  EMAIL_USER: process.env.EMAIL_USER,
-  EMAIL_PASSWORD: process.env.EMAIL_PASSWORD,
-  SUPABASE_URL: process.env.SUPABASE_URL,
-  SUPABASE_KEY: process.env.SUPABASE_KEY,
-  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
-  GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
-  GOOGLE_CALLBACK_URL: process.env.GOOGLE_CALLBACK_URL,
+  DATABASE_URL: cleanEnvVar(process.env.DATABASE_URL),
+  JWT_SECRET: cleanEnvVar(process.env.JWT_SECRET),
+  JWT_REFRESH_SECRET: cleanEnvVar(process.env.JWT_REFRESH_SECRET),
+  EMAIL_USER: cleanEnvVar(process.env.EMAIL_USER),
+  EMAIL_PASSWORD: cleanEnvVar(process.env.EMAIL_PASSWORD),
+  SUPABASE_URL: cleanEnvVar(process.env.SUPABASE_URL),
+  SUPABASE_KEY: cleanEnvVar(process.env.SUPABASE_KEY),
+  GOOGLE_CLIENT_ID: cleanEnvVar(process.env.GOOGLE_CLIENT_ID, 'temp'),
+  GOOGLE_CLIENT_SECRET: cleanEnvVar(process.env.GOOGLE_CLIENT_SECRET, 'temp'),
+  GOOGLE_CALLBACK_URL: cleanEnvVar(process.env.GOOGLE_CALLBACK_URL),
 };
+
+// Debug log in production to verify
+if (config.NODE_ENV === 'production') {
+  console.log('CORS_ORIGIN configured as:', config.CORS_ORIGIN);
+}
 
 export default config;
