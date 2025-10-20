@@ -18,6 +18,9 @@ import globalErrorHandler from './middleware/globalErrorHandler.js';
 const app = express();
 const httpServer = createServer(app);
 
+// CRITICAL: Trust proxy for Render deployment
+app.set('trust proxy', 1);
+
 app.use(securityMiddleware);
 app.use(cors({ origin: config.CORS_ORIGIN, credentials: true }));
 app.use(cookieParser());
