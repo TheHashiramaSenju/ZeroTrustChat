@@ -27,7 +27,10 @@
     "qrcode": "^1.5.3",
     "nodemailer": "^6.9.7",
     "passport": "^0.7.0",
-    "passport-google-oauth20": "^2.0.0"
+    "passport-google-oauth20": "^2.0.0",
+    "geoip-lite": "^1.4.7",
+    "@supabase/supabase-js": "^2.39.0",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
