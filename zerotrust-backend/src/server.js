@@ -6,6 +6,7 @@ import config from './config/environment.js';
 import { generalLimiter, authLimiter } from './middleware/rateLimiter.js';
 import { initializeSocket } from './socket.js';
 import logger from './utils/logger.js';
+import { sequelize } from './models/index.js';
 
 import authRouter from './api/v1/auth/index.js';
 import usersRouter from './api/v1/users/index.js';
@@ -47,6 +48,22 @@ app.get('/api/v1/health', (req, res) => {
 
 app.use(globalErrorHandler);
 
-httpServer.listen(config.PORT, () => {
-  logger.info(`[ZeroTrust Backend] Server running in ${config.NODE_ENV} mode on port ${config.PORT}`);
-});
+// Start server with database sync
+const startServer = async () => {
+  try {
+    await sequelize.authenticate();
+    logger.info('[Database] Connection established successfully');
+    
+    await sequelize.sync({ alter: true });
+    logger.info('[Database] Models synchronized');
+    
+    httpServer.listen(config.PORT, () => {
+      logger.info(`[ZeroTrust Backend] Server running in ${config.NODE_ENV} mode on port ${config.PORT}`);
+    });
+  } catch (error) {
+    logger.error('[Database] Connection failed:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
