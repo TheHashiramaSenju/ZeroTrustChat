@@ -1,38 +1,18 @@
-// Database configuration and connection logic (e.g., PostgreSQL with Sequelize/Knex or MongoDB with Mongoose).
-//database connection pool
 import { Sequelize } from 'sequelize';
-import config from './environment.js';
+import dotenv from 'dotenv';
 
-// Initialize Sequelize with the DATABASE_URL from your .env file
-const sequelize = new Sequelize(config.DATABASE_URL, {
+dotenv.config();
+
+const sequelize = new Sequelize(process.env.DATABASE_URL, {
     dialect: 'postgres',
     protocol: 'postgres',
-    logging: false, // Set to console.log for debugging queries in development
     dialectOptions: {
-        ssl: {
+        ssl: process.env.NODE_ENV === 'production' ? {
             require: true,
-            rejectUnauthorized: false, // Supabase - SSL Required 
-        },
+            rejectUnauthorized: false
+        } : false
     },
-    pool: {
-        max: 10,
-        min: 0,
-        acquire: 30000,
-        idle: 10000,
-    },
+    logging: process.env.NODE_ENV === 'development' ? console.log : false,
 });
-
-// Test the database connection @mukesh added 
-const testConnection = async () => {
-    try {
-        await sequelize.authenticate();
-        console.log('[Database] Connection has been established successfully.');
-    } catch (error) {
-        console.error('[Database] Unable to connect:', error);
-        process.exit(1);
-    }
-};
-
-testConnection();
 
 export default sequelize;

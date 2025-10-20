@@ -1,0 +1,13 @@
+// Logout
+router.post('/logout', authenticateToken, async (req, res, next) => {
+    try {
+        await Session.update(
+            { isActive: false },
+            { where: { userId: req.user.userId, isActive: true } }
+        );
+        
+        res.json({ message: 'Logged out successfully' });
+    } catch (err) {
+        next(err);
+    }
+});

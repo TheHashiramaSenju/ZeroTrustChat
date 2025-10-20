@@ -1,138 +1,185 @@
 import { Session, AuditLog } from '../models/index.js';
+import logger from '../utils/logger.js';
 import { Op } from 'sequelize';
-import GeolocationService from './GeolocationService.js';
-import logger from '../utils/logger.js'; // ← ADD THIS LINE
 
 class RiskEngineService {
-    /**
-     * Calculates a risk score for a user's current request context.
-     * Score: 0 (high risk) to 100 (trusted).
-     * @param {string} userId 
-     * @param {object} context - { ip, deviceFingerprint, location, time }
-     * @returns {Promise<number>} - Risk score
-     */
-    static async calculateRiskScore(userId, context) {
-        let score = 50; // Baseline
+    static async calculateTrustScore(sessionId, userId, ipAddress, userAgent) {
+        try {
+            let score = 100;
+            const factors = [];
 
-        // Factor 1: Device trust
-        const knownDevice = await Session.findOne({
-            where: {
-                userId,
-                deviceFingerprint: context.deviceFingerprint,
-                isActive: true,
-            },
-        });
-        
-        if (knownDevice) {
-            score += 20;
-        } else {
-            score -= 15;
+            const deviceScore = await this.checkDeviceConsistency(userId, ipAddress, userAgent);
+            score -= (30 - deviceScore);
+            factors.push({ factor: 'Device Consistency', score: deviceScore, max: 30 });
+
+            const patternScore = await this.checkLoginPatterns(userId);
+            score -= (25 - patternScore);
+            factors.push({ factor: 'Login Patterns', score: patternScore, max: 25 });
+
+            const geoScore = await this.checkGeographicAnomaly(userId, ipAddress);
+            score -= (20 - geoScore);
+            factors.push({ factor: 'Geographic Location', score: geoScore, max: 20 });
+
+            const timeScore = await this.checkTimePatterns(userId);
+            score -= (15 - timeScore);
+            factors.push({ factor: 'Time Patterns', score: timeScore, max: 15 });
+
+            const securityScore = await this.checkSecurityEvents(userId);
+            score -= (10 - securityScore);
+            factors.push({ factor: 'Security Events', score: securityScore, max: 10 });
+
+            score = Math.max(0, Math.min(100, score));
+
+            logger.info(`Trust score calculated for user ${userId}: ${score}/100`, { factors });
+
+            return { score, factors };
+        } catch (error) {
+            logger.error('Trust score calculation error:', error);
+            return { score: 75, factors: [] };
         }
+    }
 
-        // Factor 2: Recent failed logins
-        const recentFailures = await AuditLog.count({
-            where: {
-                userId,
-                action: 'LOGIN_FAILED',
-                createdAt: {
-                    [Op.gte]: new Date(Date.now() - 15 * 60 * 1000),
+    static async checkDeviceConsistency(userId, ipAddress, userAgent) {
+        try {
+            const recentSessions = await Session.findAll({
+                where: {
+                    userId,
+                    createdAt: { [Op.gte]: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
                 },
-            },
-        });
-        
-        score -= recentFailures * 10;
+                limit: 10,
+                order: [['createdAt', 'DESC']]
+            });
 
-        // Factor 3: Time anomaly
-        const hour = new Date().getHours();
-        if (hour >= 2 && hour <= 5) {
-            score -= 5;
-        }
+            if (recentSessions.length === 0) return 15;
 
-        // Factor 4: IP consistency
-        const recentSessions = await Session.findAll({
-            where: { userId, isActive: true },
-            limit: 5,
-            order: [['lastActiveAt', 'DESC']],
-        });
-        
-        const uniqueIPs = new Set(recentSessions.map(s => s.ipAddress));
-        if (uniqueIPs.size > 3) {
-            score -= 10;
-        }
+            const matchingDevices = recentSessions.filter(s => 
+                s.ipAddress === ipAddress || s.userAgent === userAgent
+            );
 
-        // Factor 5: GEOLOCATION RISK (NEW!)
-        const locationPenalty = await this.analyzeLocationRisk(userId, context.ip);
-        score -= locationPenalty;
-
-        return Math.max(0, Math.min(100, score));
-    }
-
-    /**
-     * Determines if an action should be allowed based on risk score.
-     * @param {number} riskScore 
-     * @returns {object} - { allowed: boolean, reason: string }
-     */
-    static evaluateAccess(riskScore) {
-        if (riskScore >= 70) {
-            return { allowed: true, reason: 'Trusted' };
-        } else if (riskScore >= 40) {
-            return { allowed: true, reason: 'Moderate risk - monitoring' };
-        } else {
-            return { allowed: false, reason: 'High risk - additional verification required' };
+            const consistency = (matchingDevices.length / recentSessions.length) * 30;
+            return Math.round(consistency);
+        } catch (error) {
+            logger.error('Device consistency check error:', error);
+            return 15;
         }
     }
 
-    /**
-     * Analyze location risk
-     * @param {string} userId 
-     * @param {string} currentIp 
-     * @returns {Promise<number>} Risk penalty (0-20)
-     */
-    static async analyzeLocationRisk(userId, currentIp) {
-        let penalty = 0;
+    static async checkLoginPatterns(userId) {
+        try {
+            const loginLogs = await AuditLog.findAll({
+                where: {
+                    userId,
+                    action: { [Op.in]: ['LOGIN_SUCCESS', 'LOGIN_FAILED'] },
+                    createdAt: { [Op.gte]: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+                },
+                order: [['createdAt', 'DESC']]
+            });
 
-        const currentLocation = GeolocationService.getLocation(currentIp);
-        if (!currentLocation) return 0; // Can't analyze without location
+            if (loginLogs.length === 0) return 12;
 
-        // Get the user's last 2 sessions
-        const recentSessions = await Session.findAll({
-            where: { userId, isActive: true },
-            order: [['lastActiveAt', 'DESC']],
-            limit: 2,
-        });
+            const failedLogins = loginLogs.filter(log => log.action === 'LOGIN_FAILED').length;
+            const successLogins = loginLogs.filter(log => log.action === 'LOGIN_SUCCESS').length;
 
-        if (recentSessions.length > 1) {
-            const lastSession = recentSessions[1];
+            if (failedLogins > successLogins) return 10;
 
-            if (lastSession.location) {
-                // Check for different country
-                if (lastSession.location.country !== currentLocation.country) {
-                    penalty += 10;
-                    logger.warn(`Country change detected for user ${userId}: ${lastSession.location.country} → ${currentLocation.country}`);
-                }
-
-                // Check for impossible travel
-                const isImpossible = GeolocationService.detectImpossibleTravel(
-                    {
-                        latitude: lastSession.location.latitude,
-                        longitude: lastSession.location.longitude,
-                        timestamp: lastSession.lastActiveAt,
-                    },
-                    {
-                        latitude: currentLocation.latitude,
-                        longitude: currentLocation.longitude,
-                        timestamp: new Date(),
-                    }
-                );
-
-                if (isImpossible) {
-                    penalty += 20; // Major red flag
-                    logger.error(`IMPOSSIBLE TRAVEL detected for user ${userId}`);
-                }
-            }
+            return Math.min(25, 15 + successLogins * 2);
+        } catch (error) {
+            logger.error('Login pattern check error:', error);
+            return 12;
         }
+    }
 
-        return penalty;
+    static async checkGeographicAnomaly(userId, ipAddress) {
+        try {
+            const ipPrefix = ipAddress.split('.').slice(0, 2).join('.');
+
+            const recentSessions = await Session.findAll({
+                where: {
+                    userId,
+                    createdAt: { [Op.gte]: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+                },
+                limit: 5
+            });
+
+            if (recentSessions.length === 0) return 10;
+
+            const matchingRegions = recentSessions.filter(s => 
+                s.ipAddress && s.ipAddress.startsWith(ipPrefix)
+            );
+
+            const consistency = (matchingRegions.length / recentSessions.length) * 20;
+            return Math.round(consistency);
+        } catch (error) {
+            logger.error('Geographic check error:', error);
+            return 10;
+        }
+    }
+
+    static async checkTimePatterns(userId) {
+        try {
+            const currentHour = new Date().getHours();
+
+            const recentLogins = await AuditLog.findAll({
+                where: {
+                    userId,
+                    action: 'LOGIN_SUCCESS',
+                    createdAt: { [Op.gte]: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000) }
+                },
+                limit: 20
+            });
+
+            if (recentLogins.length < 3) return 7;
+
+            const loginHours = recentLogins.map(log => new Date(log.createdAt).getHours());
+            const avgHour = loginHours.reduce((a, b) => a + b, 0) / loginHours.length;
+
+            const deviation = Math.abs(currentHour - avgHour);
+
+            if (deviation < 3) return 15;
+            if (deviation < 6) return 10;
+            return 5;
+        } catch (error) {
+            logger.error('Time pattern check error:', error);
+            return 7;
+        }
+    }
+
+    static async checkSecurityEvents(userId) {
+        try {
+            // Just count failed logins as security events
+            const securityEvents = await AuditLog.findAll({
+                where: {
+                    userId,
+                    action: 'LOGIN_FAILED',
+                    createdAt: { [Op.gte]: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+                }
+            });
+
+            if (securityEvents.length === 0) return 10;
+
+            return Math.max(0, 10 - securityEvents.length * 2);
+        } catch (error) {
+            logger.error('Security event check error:', error);
+            return 5;
+        }
+    }
+
+    static async updateSessionTrustScore(sessionId, userId, ipAddress, userAgent) {
+        try {
+            const { score, factors } = await this.calculateTrustScore(sessionId, userId, ipAddress, userAgent);
+
+            await Session.update(
+                { trustScore: score },
+                { where: { id: sessionId } }
+            );
+
+            logger.info(`Session ${sessionId} trust score updated to ${score}`);
+
+            return { score, factors };
+        } catch (error) {
+            logger.error('Update session trust score error:', error);
+            return { score: 75, factors: [] };
+        }
     }
 }
 

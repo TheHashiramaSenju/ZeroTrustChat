@@ -17,12 +17,12 @@ User.init(
             validate: { isEmail: true },
         },
         username: {
-            type: DataTypes.STRING,
+            type: DataTypes.STRING(30),
             allowNull: true,
             unique: true,
             validate: {
                 len: [3, 30],
-                is: /^[a-zA-Z0-9_]+$/i, // Alphanumeric and underscore only
+                is: /^[a-zA-Z0-9_]+$/i,
             },
         },
         passwordHash: {
@@ -47,6 +47,21 @@ User.init(
             type: DataTypes.TEXT,
             allowNull: true,
         },
+        emailVerified: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false,
+        },
+        emailVerificationToken: {
+            type: DataTypes.STRING(10),
+            allowNull: true,
+            field: 'emailVerificationToken'
+        },
+        emailVerificationExpires: {
+            type: DataTypes.DATE,
+            allowNull: true,
+            field: 'emailVerificationExpires'
+        },
         failedLoginAttempts: {
             type: DataTypes.INTEGER,
             allowNull: false,
@@ -59,11 +74,6 @@ User.init(
         lastFailedLoginAt: {
             type: DataTypes.DATE,
             allowNull: true,
-        },
-        emailVerified: {
-            type: DataTypes.BOOLEAN,
-            allowNull: false,
-            defaultValue: false,
         },
         oauthProvider: {
             type: DataTypes.STRING,
@@ -89,6 +99,7 @@ User.init(
         modelName: 'User',
         tableName: 'users',
         timestamps: true,
+        underscored: false, // Use camelCase not snake_case
     }
 );
 

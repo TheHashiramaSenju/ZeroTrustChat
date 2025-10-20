@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: zerotrust-backend
+    runtime: node
+    buildCommand: yarn install
+    startCommand: yarn start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4001
+databases:
+  - name: zerotrust-db
+    databaseName: zerotrust
+    user: zerotrust_user

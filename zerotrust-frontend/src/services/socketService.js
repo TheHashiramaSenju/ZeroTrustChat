@@ -1,6 +1,4 @@
-import { io } from 'socket.io-client';
-
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:4001';
+import io from 'socket.io-client';
 
 class SocketService {
   constructor() {
@@ -8,14 +6,22 @@ class SocketService {
   }
 
   connect(token) {
-    if (this.socket?.connected) return;
+    const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:4001';
+    
     this.socket = io(SOCKET_URL, {
       auth: { token },
-      transports: ['websocket'],
-      reconnection: true,
+      transports: ['websocket', 'polling'],
     });
-    this.socket.on('connect', () => console.log('✅ Socket connected'));
-    this.socket.on('disconnect', () => console.log('❌ Socket disconnected'));
+
+    this.socket.on('connect', () => {
+      console.log('Socket connected');
+    });
+
+    this.socket.on('disconnect', () => {
+      console.log('Socket disconnected');
+    });
+
+    return this.socket;
   }
 
   disconnect() {
@@ -26,19 +32,21 @@ class SocketService {
   }
 
   emit(event, data) {
-    if (this.socket?.connected) this.socket.emit(event, data);
+    if (this.socket) {
+      this.socket.emit(event, data);
+    }
   }
 
   on(event, callback) {
-    if (this.socket) this.socket.on(event, callback);
+    if (this.socket) {
+      this.socket.on(event, callback);
+    }
   }
 
-  off(event, callback) {
-    if (this.socket) this.socket.off(event, callback);
-  }
-
-  isConnected() {
-    return this.socket?.connected || false;
+  off(event) {
+    if (this.socket) {
+      this.socket.off(event);
+    }
   }
 }
 

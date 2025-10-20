@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../services/authService';
 import socketService from '../services/socketService';
+import api from '../lib/axios';
 
 const AuthContext = createContext(null);
 
@@ -23,11 +24,11 @@ export const AuthProvider = ({ children }) => {
     
     if (token) {
       try {
-        const userData = await authService.getCurrentUser();
-        setUser(userData.user);
+        const { data } = await api.get('/auth/me');
+        setUser(data.user);
         socketService.connect(token);
       } catch (error) {
-        console.log('Session expired');
+        console.log('Session expired or invalid');
         localStorage.removeItem('accessToken');
         setUser(null);
       }
@@ -36,20 +37,27 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = async (email, password) => {
-    const data = await authService.login(email, password);
-    
-    if (data.mfaRequired) {
-      return { mfaRequired: true, mfaToken: data.mfaToken };
+    try {
+      const { data } = await api.post('/auth/login', { email, password });
+      
+      // Check if MFA is required
+      if (data.mfaRequired) {
+        return { mfaRequired: true, mfaToken: data.mfaToken };
+      }
+      
+      // Regular login success
+      if (data.accessToken) {
+        localStorage.setItem('accessToken', data.accessToken);
+        setUser(data.user);
+        socketService.connect(data.accessToken);
+        return { success: true };
+      }
+      
+      throw new Error('No access token received');
+    } catch (error) {
+      // Pass the full error response to LoginPage
+      throw error;
     }
-    
-    if (data.accessToken) {
-      localStorage.setItem('accessToken', data.accessToken);
-      setUser(data.user);
-      socketService.connect(data.accessToken);
-      return { success: true };
-    }
-    
-    throw new Error('No access token received');
   };
 
   const register = async (email, password) => {
@@ -57,18 +65,27 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    await authService.logout();
-    setUser(null);
-    socketService.disconnect();
-    localStorage.removeItem('accessToken');
+    try {
+      await authService.logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setUser(null);
+      socketService.disconnect();
+      localStorage.removeItem('accessToken');
+    }
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center min-h-screen bg-slate-950 text-slate-400 font-mono text-sm">INITIALIZING...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-950 text-slate-400 font-mono text-sm">
+        INITIALIZING...
+      </div>
+    );
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, checkAuth }}>
       {children}
     </AuthContext.Provider>
   );

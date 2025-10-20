@@ -114,7 +114,7 @@ router.get('/risk-score', authenticateToken, async (req, res, next) => {
         const ipAddress = req.ip;
         const userAgent = req.headers['user-agent'];
 
-        const riskScore = await RiskEngineService.calculateRiskScore(userId, ipAddress, userAgent);
+        const riskScore = await RiskEngineService.calculateTrustScore(userId, ipAddress, userAgent);
 
         res.json({ riskScore });
     } catch (err) {
@@ -392,4 +392,109 @@ router.delete('/mfa/disable', authenticateToken, async (req, res, next) => {
     }
 });
 
+/**
+ * DELETE /api/v1/security/sessions/:sessionId
+ * Revoke a specific session
+ */
+router.delete("/sessions/:sessionId", authenticateToken, async (req, res, next) => {
+    try {
+        const userId = req.user.userId;
+        const { sessionId } = req.params;
+
+        const session = await Session.findOne({
+            where: { id: sessionId, userId }
+        });
+
+        if (!session) {
+            return res.status(404).json({ error: "Session not found" });
+        }
+
+        await session.update({ isActive: false });
+
+        await AuditLog.create({
+            userId,
+            action: "SESSION_REVOKED",
+            details: `Session revoked: ${sessionId}`,
+            ipAddress: req.ip,
+            userAgent: req.headers["user-agent"],
+            severity: "info",
+        });
+
+        logger.info(`Session ${sessionId} revoked by user ${userId}`);
+
+        res.json({ message: "Session revoked successfully" });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * DELETE /api/v1/security/sessions/:sessionId
+ * Revoke a specific session
+ */
+router.delete("/sessions/:sessionId", authenticateToken, async (req, res, next) => {
+    try {
+        const userId = req.user.userId;
+        const { sessionId } = req.params;
+
+        const session = await Session.findOne({
+            where: { id: sessionId, userId }
+        });
+
+        if (!session) {
+            return res.status(404).json({ error: "Session not found" });
+        }
+
+        await session.update({ isActive: false });
+
+        await AuditLog.create({
+            userId,
+            action: "SESSION_REVOKED",
+            details: `Session revoked: ${sessionId}`,
+            ipAddress: req.ip,
+            userAgent: req.headers["user-agent"],
+            severity: "info",
+        });
+
+        logger.info(`Session ${sessionId} revoked by user ${userId}`);
+
+        res.json({ message: "Session revoked successfully" });
+    } catch (err) {
+        next(err);
+    }
+});
+
 export default router;
+
+// DELETE /api/v1/security/sessions/:sessionId - Revoke session
+router.delete('/sessions/:sessionId', authenticateToken, async (req, res, next) => {
+    try {
+        const userId = req.user.userId;
+        const { sessionId } = req.params;
+
+        const session = await Session.findOne({
+            where: { id: sessionId, userId }
+        });
+
+        if (!session) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
+
+        await session.update({ isActive: false });
+
+        await AuditLog.create({
+            userId,
+            action: 'SESSION_REVOKED',
+            details: `Session revoked: ${sessionId}`,
+            ipAddress: req.ip,
+            userAgent: req.headers['user-agent'],
+            severity: 'info',
+        });
+
+        logger.info(`Session ${sessionId} revoked by user ${userId}`);
+
+        res.json({ message: 'Session revoked successfully' });
+    } catch (err) {
+        next(err);
+    }
+});

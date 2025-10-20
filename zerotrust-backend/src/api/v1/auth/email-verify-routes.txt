@@ -1,0 +1,43 @@
+// ADD THESE ROUTES TO src/api/v1/auth/index.js
+
+// Verify email OTP
+router.post('/verify-email', async (req, res, next) => {
+    try {
+        const { email, otp } = req.body;
+
+        if (!email || !otp) {
+            return res.status(400).json({ error: 'Email and OTP required' });
+        }
+
+        const result = await AuthService.verifyEmailOTP(email, otp);
+
+        if (result.error) {
+            return res.status(400).json({ error: result.error.message });
+        }
+
+        res.json({ message: 'Email verified successfully. You can now login.' });
+    } catch (err) {
+        next(err);
+    }
+});
+
+// Resend OTP
+router.post('/resend-otp', async (req, res, next) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ error: 'Email required' });
+        }
+
+        const result = await AuthService.resendOTP(email);
+
+        if (result.error) {
+            return res.status(400).json({ error: result.error.message });
+        }
+
+        res.json({ message: 'OTP resent successfully' });
+    } catch (err) {
+        next(err);
+    }
+});
