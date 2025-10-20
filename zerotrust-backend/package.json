@@ -30,13 +30,14 @@
     "passport-google-oauth20": "^2.0.0",
     "geoip-lite": "^1.4.7",
     "@supabase/supabase-js": "^2.39.0",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "tslib": "^2.6.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": "22.x"
   },
   "license": "AGPL-3.0",
   "keywords": [
