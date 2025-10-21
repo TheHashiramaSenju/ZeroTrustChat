@@ -142,16 +142,20 @@ class AuthService {
                 return { error: { message: 'Invalid email or password' } };
             }
 
-            if (!user.emailVerified && user.passwordHash) {
-                logger.warn(`Login attempt for unverified email: ${email}`);
-                return { 
-                    error: { 
-                        message: 'Please verify your email first', 
-                        code: 'EMAIL_NOT_VERIFIED',
-                        email: email 
-                    } 
-                };
-            }
+            if (user.passwordHash) {
+                logger.info(`Attempting login for: ${email}`);
+                logger.info(`Comparing input password="${password}" against stored hash="${user.passwordHash}"`);
+
+                const isValid = await bcrypt.compare(password, user.passwordHash);
+                logger.info(`bcrypt.compare result: ${isValid}`);
+
+                if (!isValid) {
+                    await AccountLockoutService.recordFailedAttempt(user.id);
+                    logger.warn(`Invalid password for: ${email} (input "${password}", hash "${user.passwordHash}")`);
+                    return { error: { message: 'Invalid email or password' } };
+                }
+            } 
+
 
             const lockoutCheck = await AccountLockoutService.checkLockout(user.id);
             if (lockoutCheck.locked) {
