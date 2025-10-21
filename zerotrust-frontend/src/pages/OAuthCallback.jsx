@@ -13,10 +13,10 @@ export default function OAuthCallback() {
 
         if (token) {
             localStorage.setItem('token', token);
-            toast.success('Login successful!');
-            navigate('/chat');
+            toast.success('Login successful via Google!');
+            setTimeout(() => navigate('/chat'), 500);
         } else if (error) {
-            toast.error('OAuth authentication failed');
+            toast.error(`OAuth failed: ${error}`);
             navigate('/login');
         } else {
             navigate('/login');
