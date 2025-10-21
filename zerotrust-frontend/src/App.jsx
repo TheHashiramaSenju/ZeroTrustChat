@@ -10,7 +10,7 @@ import MFASetupPage from './pages/MFASetupPage';
 import MFAVerifyPage from './pages/MFAVerifyPage';
 import EmailVerifyPage from './pages/EmailVerifyPage';
 import OAuthCallback from './pages/OAuthCallback';
-
+import SetupPassword from './pages/SetupPassword';
 
 function App() {
   return (
@@ -19,6 +19,7 @@ function App() {
         <Toaster position="top-right" />
         <Routes>
           <Route path="/auth/callback" element={<OAuthCallback />} />
+          <Route path="/setup-password" element={<SetupPassword />} />
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
