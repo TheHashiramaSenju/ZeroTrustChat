@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import AuthService from '../../../services/AuthService.js';
 import { validateRequest, Schemas } from '../../../middleware/validateRequest.js';
@@ -194,3 +195,94 @@ router.post("/logout", authenticateToken, async (req, res, next) => {
 });
 
 export default router;
+
+// POST /api/v1/auth/forgot-password
+router.post('/forgot-password', async (req, res, next) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ error: 'Email required' });
+        }
+
+        const user = await User.findOne({ where: { email } });
+
+        // Always return success to prevent email enumeration
+        if (!user) {
+            return res.json({ message: 'If email exists, reset link has been sent' });
+        }
+
+        // Generate reset token (6-digit code)
+        const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
+        const resetTokenExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+        await user.update({
+            emailVerificationToken: resetToken,
+            emailVerificationExpires: resetTokenExpires,
+        });
+
+        // Send reset email
+        await EmailService.sendPasswordResetEmail(email, resetToken);
+
+        logger.info(`Password reset requested for: ${email}`);
+
+        res.json({ message: 'If email exists, reset link has been sent' });
+    } catch (err) {
+        logger.error('Forgot password error:', err);
+        next(err);
+    }
+});
+
+// POST /api/v1/auth/reset-password
+router.post('/reset-password', async (req, res, next) => {
+    try {
+        const { email, token, newPassword } = req.body;
+
+        if (!email || !token || !newPassword) {
+            return res.status(400).json({ error: 'Email, token, and new password required' });
+        }
+
+        const user = await User.findOne({ where: { email } });
+
+        if (!user) {
+            return res.status(400).json({ error: 'Invalid reset token' });
+        }
+
+        // Verify token
+        if (user.emailVerificationToken !== token) {
+            return res.status(400).json({ error: 'Invalid reset token' });
+        }
+
+        // Check expiration
+        if (new Date() > user.emailVerificationExpires) {
+            return res.status(400).json({ error: 'Reset token expired' });
+        }
+
+        // Hash new password
+        const passwordHash = await bcrypt.hash(newPassword, 12);
+
+        // Update password and clear token
+        await user.update({
+            passwordHash,
+            emailVerificationToken: null,
+            emailVerificationExpires: null,
+            failedLoginAttempts: 0,
+            accountLockedUntil: null,
+        });
+
+        await AuditLog.create({
+            userId: user.id,
+            action: 'PASSWORD_RESET',
+            ipAddress: req.ip,
+            userAgent: req.headers['user-agent'],
+            severity: 'info',
+        });
+
+        logger.info(`Password reset successful for: ${email}`);
+
+        res.json({ message: 'Password reset successful' });
+    } catch (err) {
+        logger.error('Reset password error:', err);
+        next(err);
+    }
+});

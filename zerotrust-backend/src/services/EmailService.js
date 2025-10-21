@@ -41,3 +41,46 @@ class EmailService {
 }
 
 export default EmailService;
+
+  static async sendPasswordResetEmail(email, resetToken) {
+    try {
+      logger.info('Attempting to send password reset email', { email });
+      
+      if (!config.RESEND_API_KEY) {
+        logger.error('RESEND_API_KEY is not configured!');
+        throw new Error('Email service not configured');
+      }
+
+      const { data, error } = await resend.emails.send({
+        from: 'ZeroTrust Chat <onboarding@resend.dev>',
+        to: email,
+        subject: 'Reset Your Password - ZeroTrust Chat',
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #4F46E5;">Password Reset Request</h2>
+            <p>You requested to reset your password. Use the code below:</p>
+            <div style="background: #F3F4F6; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
+              <h1 style="color: #1F2937; margin: 0; font-size: 36px; letter-spacing: 8px;">${resetToken}</h1>
+            </div>
+            <p style="color: #6B7280;">This code will expire in 15 minutes.</p>
+            <p style="color: #EF4444; font-weight: bold;">If you didn't request this, please ignore this email and ensure your account is secure.</p>
+          </div>
+        `,
+      });
+
+      if (error) {
+        logger.error('Resend API error:', { error, email });
+        throw new Error(error.message || 'Failed to send email');
+      }
+
+      logger.info('Password reset email sent successfully!', { email, messageId: data?.id });
+      return { success: true, messageId: data?.id };
+    } catch (error) {
+      logger.error('Email service error:', { 
+        error: error.message, 
+        stack: error.stack,
+        email 
+      });
+      throw error;
+    }
+  }
