@@ -13,17 +13,15 @@ const config = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: parseInt(process.env.PORT || '4001', 10),
   
-  CORS_ORIGIN: cleanEnvVar(process.env.CORS_ORIGIN, 'http://localhost:5173'),
-  FRONTEND_URL: cleanEnvVar(process.env.FRONTEND_URL, 'http://localhost:5173'),
+  CORS_ORIGIN: cleanEnvVar(process.env.CORS_ORIGIN, 'https://zerotrustchatapp.xyz'),
+  FRONTEND_URL: cleanEnvVar(process.env.FRONTEND_URL, 'https://zerotrustchatapp.xyz'),
     
   DATABASE_URL: cleanEnvVar(process.env.DATABASE_URL),
   JWT_SECRET: cleanEnvVar(process.env.JWT_SECRET),
   JWT_REFRESH_SECRET: cleanEnvVar(process.env.JWT_REFRESH_SECRET),
   
-  // Resend API Key (replaces Gmail SMTP)
   RESEND_API_KEY: cleanEnvVar(process.env.RESEND_API_KEY),
   
-  // Keep these for backward compatibility but not used anymore
   EMAIL_USER: cleanEnvVar(process.env.EMAIL_USER),
   EMAIL_PASSWORD: cleanEnvVar(process.env.EMAIL_PASSWORD),
   
