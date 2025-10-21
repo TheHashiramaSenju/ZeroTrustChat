@@ -22,8 +22,20 @@ const httpServer = createServer(app);
 app.set('trust proxy', 1);
 
 // CORS configuration
+const allowedOrigins = config.CORS_ORIGIN.split(',').map(origin => origin.trim());
+
 app.use(cors({ 
-  origin: config.CORS_ORIGIN, 
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      logger.warn(`Blocked CORS request from: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
