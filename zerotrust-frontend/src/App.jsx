@@ -9,6 +9,8 @@ import SecurityDashboard from './pages/SecurityDashboard';
 import MFASetupPage from './pages/MFASetupPage';
 import MFAVerifyPage from './pages/MFAVerifyPage';
 import EmailVerifyPage from './pages/EmailVerifyPage';
+import OAuthCallback from './pages/OAuthCallback';
+
 
 function App() {
   return (
@@ -16,6 +18,7 @@ function App() {
       <Router>
         <Toaster position="top-right" />
         <Routes>
+          <Route path="/auth/callback" element={<OAuthCallback />} />
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
