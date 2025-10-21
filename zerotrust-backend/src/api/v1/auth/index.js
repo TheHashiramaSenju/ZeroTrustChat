@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import AuthService from '../../../services/AuthService.js';
+import EmailService from '../../../services/EmailService.js';
 import { validateRequest, Schemas } from '../../../middleware/validateRequest.js';
 import jwt from 'jsonwebtoken';
 import { User, AuditLog, Session } from '../../../models/index.js';
@@ -9,7 +10,28 @@ import authenticateToken from '../../../middleware/authenticateToken.js';
 
 const router = Router();
 
-// Register with username
+// GET /api/v1/auth/check-username - Check username availability (REALTIME)
+router.get('/check-username', async (req, res) => {
+    try {
+        const { username } = req.query;
+        
+        if (!username || username.length < 3) {
+            return res.json({ available: false, message: 'Username must be at least 3 characters' });
+        }
+
+        const user = await User.findOne({ where: { username } });
+        
+        res.json({ 
+            available: !user,
+            message: user ? 'Username taken' : 'Username available'
+        });
+    } catch (err) {
+        logger.error('Username check error:', err);
+        res.status(500).json({ available: false, message: 'Server error' });
+    }
+});
+
+// POST /api/v1/auth/register - Register with username
 router.post('/register', async (req, res, next) => {
     try {
         const { email, password, username } = req.body;
@@ -17,48 +39,6 @@ router.post('/register', async (req, res, next) => {
         // Check if username is taken
         if (username) {
             const existingUser = await User.findOne({ where: { username } });
-
-// Verify email OTP
-router.post("/verify-email", async (req, res, next) => {
-    try {
-        const { email, otp } = req.body;
-
-        if (!email || !otp) {
-            return res.status(400).json({ error: "Email and OTP required" });
-        }
-
-        const result = await AuthService.verifyEmailOTP(email, otp);
-
-        if (result.error) {
-            return res.status(400).json({ error: result.error.message });
-        }
-
-        res.json({ message: "Email verified successfully. You can now login." });
-    } catch (err) {
-        next(err);
-    }
-});
-
-// Resend OTP
-router.post("/resend-otp", async (req, res, next) => {
-    try {
-        const { email } = req.body;
-
-        if (!email) {
-            return res.status(400).json({ error: "Email required" });
-        }
-
-        const result = await AuthService.resendOTP(email);
-
-        if (result.error) {
-            return res.status(400).json({ error: result.error.message });
-        }
-
-        res.json({ message: "OTP resent successfully" });
-    } catch (err) {
-        next(err);
-    }
-});
             if (existingUser) {
                 return res.status(409).json({ error: 'Username already taken' });
             }
@@ -84,27 +64,49 @@ router.post("/resend-otp", async (req, res, next) => {
     }
 });
 
-// Check username availability
-router.post('/check-username', async (req, res) => {
+// POST /api/v1/auth/verify-email - Verify email OTP
+router.post("/verify-email", async (req, res, next) => {
     try {
-        const { username } = req.body;
-        
-        if (!username || username.length < 3) {
-            return res.json({ available: false, message: 'Username must be at least 3 characters' });
+        const { email, otp } = req.body;
+
+        if (!email || !otp) {
+            return res.status(400).json({ error: "Email and OTP required" });
         }
 
-        const user = await User.findOne({ where: { username } });
-        
-        res.json({ 
-            available: !user,
-            message: user ? 'Username taken' : 'Username available'
-        });
+        const result = await AuthService.verifyEmailOTP(email, otp);
+
+        if (result.error) {
+            return res.status(400).json({ error: result.error.message });
+        }
+
+        res.json({ message: "Email verified successfully. You can now login." });
     } catch (err) {
-        res.status(500).json({ error: 'Server error' });
+        next(err);
     }
 });
 
-// Login
+// POST /api/v1/auth/resend-otp - Resend OTP
+router.post("/resend-otp", async (req, res, next) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ error: "Email required" });
+        }
+
+        const result = await AuthService.resendOTP(email);
+
+        if (result.error) {
+            return res.status(400).json({ error: result.error.message });
+        }
+
+        res.json({ message: "OTP resent successfully" });
+    } catch (err) {
+        next(err);
+    }
+});
+
+// POST /api/v1/auth/login - Login
 router.post('/login', async (req, res, next) => {
     try {
         const { email, password } = req.body;
@@ -163,7 +165,7 @@ router.post('/login', async (req, res, next) => {
     }
 });
 
-// Get current user
+// GET /api/v1/auth/me - Get current user
 router.get('/me', authenticateToken, async (req, res, next) => {
     try {
         const user = await User.findByPk(req.user.userId, {
@@ -180,7 +182,7 @@ router.get('/me', authenticateToken, async (req, res, next) => {
     }
 });
 
-// Logout
+// POST /api/v1/auth/logout - Logout
 router.post("/logout", authenticateToken, async (req, res, next) => {
     try {
         await Session.update(
@@ -194,9 +196,7 @@ router.post("/logout", authenticateToken, async (req, res, next) => {
     }
 });
 
-export default router;
-
-// POST /api/v1/auth/forgot-password
+// POST /api/v1/auth/forgot-password - Request password reset
 router.post('/forgot-password', async (req, res, next) => {
     try {
         const { email } = req.body;
@@ -233,7 +233,7 @@ router.post('/forgot-password', async (req, res, next) => {
     }
 });
 
-// POST /api/v1/auth/reset-password
+// POST /api/v1/auth/reset-password - Reset password with token
 router.post('/reset-password', async (req, res, next) => {
     try {
         const { email, token, newPassword } = req.body;
@@ -286,3 +286,5 @@ router.post('/reset-password', async (req, res, next) => {
         next(err);
     }
 });
+
+export default router;
