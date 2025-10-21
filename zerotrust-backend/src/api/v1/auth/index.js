@@ -17,14 +17,6 @@ router.post('/register', async (req, res, next) => {
             return res.status(400).json({ error: 'Email and password required' });
         }
 
-        // Check username ONLY if provided
-        if (username) {
-            const existingUser = await User.findOne({ where: { username } });
-            if (existingUser) {
-                return res.status(409).json({ error: 'Username already taken' });
-            }
-        }
-
         const { error } = await AuthService.register(email, password);
 
         if (error) {
@@ -38,7 +30,7 @@ router.post('/register', async (req, res, next) => {
             await User.update({ username }, { where: { email } });
         }
 
-        logger.info(`User registered: ${email}`);
+        logger.info(`✅ User registered: ${email}`);
         res.status(201).json({ message: 'Registration successful! Check your email for OTP.' });
     } catch (err) {
         logger.error('Registration error:', err);
@@ -46,7 +38,6 @@ router.post('/register', async (req, res, next) => {
     }
 });
 
-// POST /api/v1/auth/verify-email
 router.post("/verify-email", async (req, res, next) => {
     try {
         const { email, otp } = req.body;
@@ -63,7 +54,6 @@ router.post("/verify-email", async (req, res, next) => {
     }
 });
 
-// POST /api/v1/auth/resend-otp
 router.post("/resend-otp", async (req, res, next) => {
     try {
         const { email } = req.body;
@@ -80,7 +70,6 @@ router.post("/resend-otp", async (req, res, next) => {
     }
 });
 
-// POST /api/v1/auth/login
 router.post('/login', async (req, res, next) => {
     try {
         const { email, password } = req.body;
@@ -123,23 +112,24 @@ router.post('/login', async (req, res, next) => {
     }
 });
 
-// GET /api/v1/auth/google
 router.get('/google', (req, res) => {
     const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${process.env.GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.GOOGLE_CALLBACK_URL)}&response_type=code&scope=profile email&access_type=offline&prompt=consent`;
-    logger.info('Redirecting to Google OAuth');
+    logger.info('🔄 Redirecting to Google OAuth');
     res.redirect(googleAuthUrl);
 });
 
-// GET /api/v1/auth/google/callback - FIXED: Direct to chat
+// FIXED: Google OAuth callback - Creates user WITHOUT password requirement
 router.get('/google/callback', async (req, res) => {
     try {
         const { code } = req.query;
 
         if (!code) {
+            logger.error('❌ No OAuth code received');
             return res.redirect(`${process.env.FRONTEND_URL}/login?error=no_code`);
         }
 
-        // Exchange code for tokens
+        logger.info('🔄 Exchanging OAuth code for tokens...');
+
         const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -155,28 +145,33 @@ router.get('/google/callback', async (req, res) => {
         const tokens = await tokenResponse.json();
 
         if (tokens.error) {
-            logger.error('Token error:', tokens);
+            logger.error('❌ Token exchange failed:', tokens);
             return res.redirect(`${process.env.FRONTEND_URL}/login?error=token_failed`);
         }
 
-        // Get user info
+        logger.info('✅ Getting user info from Google...');
+
         const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
             headers: { Authorization: `Bearer ${tokens.access_token}` },
         });
 
         const googleUser = await userResponse.json();
+        logger.info('✅ Google user:', { email: googleUser.email, name: googleUser.name });
 
-        // Find or create user
+        // Find or create user (NO PASSWORD NEEDED FOR OAUTH USERS)
         let user = await User.findOne({ where: { email: googleUser.email } });
 
         if (!user) {
-            logger.info('Creating new user from Google OAuth');
+            logger.info('🆕 Creating new OAuth user...');
             user = await User.create({
                 email: googleUser.email,
-                username: googleUser.email.split('@')[0] + Math.random().toString(36).substr(2, 4),
+                username: googleUser.name?.replace(/\s+/g, '_').toLowerCase() || googleUser.email.split('@')[0],
                 emailVerified: true,
-                passwordHash: await bcrypt.hash('GOOGLE_OAUTH_' + Math.random(), 10),
+                passwordHash: await bcrypt.hash('GOOGLE_OAUTH_NO_PASSWORD_' + Date.now(), 10),
             });
+            logger.info('✅ OAuth user created:', { id: user.id, email: user.email });
+        } else {
+            logger.info('✅ Existing user found:', { id: user.id, email: user.email });
         }
 
         // Create JWT
@@ -188,21 +183,22 @@ router.get('/google/callback', async (req, res) => {
 
         await AuditLog.create({
             userId: user.id,
-            action: 'GOOGLE_LOGIN',
+            action: 'GOOGLE_LOGIN_SUCCESS',
             ipAddress: req.ip,
             userAgent: req.headers['user-agent'],
             severity: 'info',
         });
 
-        // Redirect WITH token
+        logger.info('✅ OAuth complete, redirecting to chat...');
+
+        // REDIRECT DIRECTLY TO CHAT WITH TOKEN
         res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${accessToken}`);
     } catch (err) {
-        logger.error('OAuth error:', err);
+        logger.error('❌ OAuth error:', err);
         res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_failed`);
     }
 });
 
-// GET /api/v1/auth/me
 router.get('/me', authenticateToken, async (req, res, next) => {
     try {
         const user = await User.findByPk(req.user.userId, {
@@ -217,7 +213,6 @@ router.get('/me', authenticateToken, async (req, res, next) => {
     }
 });
 
-// POST /api/v1/auth/logout
 router.post("/logout", authenticateToken, async (req, res, next) => {
     try {
         await Session.update(
