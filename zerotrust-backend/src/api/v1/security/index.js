@@ -12,10 +12,7 @@ import speakeasy from 'speakeasy';
 
 const router = Router();
 
-/**
- * GET /api/v1/security/sessions
- * List all active sessions for the current user (mukesh -look to this mate)
- */
+// GET /api/v1/security/sessions
 router.get('/sessions', authenticateToken, async (req, res, next) => {
     try {
         const userId = req.user.userId;
@@ -41,10 +38,7 @@ router.get('/sessions', authenticateToken, async (req, res, next) => {
     }
 });
 
-/**
- * DELETE /api/v1/security/sessions/:sessionId
- * Revoke a specific session
- */
+// DELETE /api/v1/security/sessions/:sessionId
 router.delete('/sessions/:sessionId', authenticateToken, async (req, res, next) => {
     try {
         const userId = req.user.userId;
@@ -76,10 +70,7 @@ router.delete('/sessions/:sessionId', authenticateToken, async (req, res, next) 
     }
 });
 
-/**
- * POST /api/v1/security/sessions/revoke-all
- * Revoke all sessions for the current user (emergency logout)
- */
+// POST /api/v1/security/sessions/revoke-all
 router.post('/sessions/revoke-all', authenticateToken, async (req, res, next) => {
     try {
         const userId = req.user.userId;
@@ -104,28 +95,28 @@ router.post('/sessions/revoke-all', authenticateToken, async (req, res, next) =>
     }
 });
 
-/**
- * GET /api/v1/security/risk-score
- * Get the current user's risk score
- */
+// GET /api/v1/security/risk-score - FIXED VERSION
 router.get('/risk-score', authenticateToken, async (req, res, next) => {
     try {
         const userId = req.user.userId;
         const ipAddress = req.ip;
         const userAgent = req.headers['user-agent'];
 
-        const riskScore = await RiskEngineService.calculateTrustScore(userId, ipAddress, userAgent);
-
-        res.json({ riskScore });
+        const riskData = await RiskEngineService.calculateTrustScore(userId, ipAddress, userAgent);
+        
+        // Return flat structure that React can render
+        res.json({ 
+            score: riskData.score || 0,
+            factors: riskData.factors || [],
+            timestamp: new Date().toISOString()
+        });
     } catch (err) {
+        logger.error('Risk score error:', err);
         next(err);
     }
 });
 
-/**
- * GET /api/v1/security/audit-logs
- * Get audit logs for the current user (admin can see all)
- */
+// GET /api/v1/security/audit-logs
 router.get('/audit-logs', authenticateToken, async (req, res, next) => {
     try {
         const userId = req.user.userId;
@@ -145,10 +136,7 @@ router.get('/audit-logs', authenticateToken, async (req, res, next) => {
     }
 });
 
-/**
- * POST /api/v1/security/mfa/setup
- * Generate a new MFA secret and QR code
- */
+// POST /api/v1/security/mfa/setup
 router.post('/mfa/setup', authenticateToken, async (req, res, next) => {
     try {
         const userId = req.user.userId;
@@ -166,10 +154,7 @@ router.post('/mfa/setup', authenticateToken, async (req, res, next) => {
     }
 });
 
-/**
- * POST /api/v1/security/mfa/enable
- * Enable MFA after user verifies the initial code
- */
+// POST /api/v1/security/mfa/enable
 router.post('/mfa/enable', authenticateToken, async (req, res, next) => {
     try {
         const userId = req.user.userId;
@@ -179,14 +164,12 @@ router.post('/mfa/enable', authenticateToken, async (req, res, next) => {
             return res.status(400).json({ error: 'Token required' });
         }
 
-        // Get user to retrieve saved secret
         const user = await User.findByPk(userId);
         
         if (!user || !user.mfaSecret) {
             return res.status(400).json({ error: 'MFA setup not completed. Please scan QR code first.' });
         }
 
-        // Verify the token using saved secret
         const isValid = speakeasy.totp.verify({
             secret: user.mfaSecret,
             encoding: 'base32',
@@ -198,12 +181,10 @@ router.post('/mfa/enable', authenticateToken, async (req, res, next) => {
             return res.status(400).json({ error: 'Invalid verification code. Make sure your phone time is synced.' });
         }
 
-        // Generate backup codes
         const backupCodes = Array.from({ length: 8 }, () =>
             Math.random().toString(36).substr(2, 8).toUpperCase()
         );
 
-        // Enable MFA
         await User.update(
             {
                 mfaEnabled: true,
@@ -232,16 +213,69 @@ router.post('/mfa/enable', authenticateToken, async (req, res, next) => {
     }
 });
 
-/**
- * POST /api/v1/security/mfa/verify
- * Verify MFA token during login
- */
+// POST /api/v1/security/mfa/verify
 router.post('/mfa/verify', async (req, res, next) => {
+    try {
+        const { token, mfaToken } = req.body;
 
-/**
- * POST /api/v1/security/mfa/verify-backup
- * Verify backup code during login
- */
+        if (!token || !mfaToken) {
+            return res.status(400).json({ error: 'Token and MFA token required' });
+        }
+
+        const decoded = jwt.verify(mfaToken, process.env.JWT_SECRET);
+
+        if (!decoded.mfaRequired) {
+            return res.status(400).json({ error: 'Invalid MFA token' });
+        }
+
+        const userId = decoded.userId;
+        const user = await User.findByPk(userId);
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const isValid = speakeasy.totp.verify({
+            secret: user.mfaSecret,
+            encoding: 'base32',
+            token: token,
+            window: 2,
+        });
+
+        if (!isValid) {
+            return res.status(400).json({ error: 'Invalid verification code' });
+        }
+
+        const accessToken = jwt.sign(
+            { userId: user.id, email: user.email, username: user.username, role: user.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
+        await AuditLog.create({
+            userId,
+            action: 'MFA_VERIFIED',
+            ipAddress: req.ip,
+            userAgent: req.headers['user-agent'],
+            severity: 'info',
+        });
+
+        res.json({
+            accessToken,
+            user: {
+                id: user.id,
+                email: user.email,
+                username: user.username,
+                role: user.role,
+                mfaEnabled: user.mfaEnabled,
+            },
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+// POST /api/v1/security/mfa/verify-backup
 router.post("/mfa/verify-backup", async (req, res, next) => {
     try {
         const { backupCode, mfaToken } = req.body;
@@ -250,7 +284,7 @@ router.post("/mfa/verify-backup", async (req, res, next) => {
             return res.status(400).json({ error: "Backup code and MFA token required" });
         }
 
-        const decoded = jwt.default.verify(mfaToken, process.env.JWT_SECRET);
+        const decoded = jwt.verify(mfaToken, process.env.JWT_SECRET);
 
         if (!decoded.mfaRequired) {
             return res.status(400).json({ error: "Invalid MFA token" });
@@ -273,7 +307,7 @@ router.post("/mfa/verify-backup", async (req, res, next) => {
         codes.splice(codeIndex, 1);
         await user.update({ backupCodes: JSON.stringify(codes) });
 
-        const accessToken = jwt.default.sign(
+        const accessToken = jwt.sign(
             { userId: user.id, email: user.email, username: user.username, role: user.role },
             process.env.JWT_SECRET,
             { expiresIn: "24h" }
@@ -304,73 +338,8 @@ router.post("/mfa/verify-backup", async (req, res, next) => {
         next(err);
     }
 });
-    try {
-        const { token, mfaToken } = req.body;
 
-        if (!token || !mfaToken) {
-            return res.status(400).json({ error: 'Token and MFA token required' });
-        }
-
-        // Decode mfaToken to get userId
-        const jwt = await import('jsonwebtoken');
-        const decoded = jwt.default.verify(mfaToken, process.env.JWT_SECRET);
-
-        if (!decoded.mfaRequired) {
-            return res.status(400).json({ error: 'Invalid MFA token' });
-        }
-
-        const userId = decoded.userId;
-        const user = await User.findByPk(userId);
-
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        // Verify TOTP token
-        const isValid = speakeasy.totp.verify({
-            secret: user.mfaSecret,
-            encoding: 'base32',
-            token: token,
-            window: 2,
-        });
-
-        if (!isValid) {
-            return res.status(400).json({ error: 'Invalid verification code' });
-        }
-
-        // Generate regular access token
-        const accessToken = jwt.default.sign(
-            { userId: user.id, email: user.email, role: user.role },
-            process.env.JWT_SECRET,
-            { expiresIn: '24h' }
-        );
-
-        await AuditLog.create({
-            userId,
-            action: 'MFA_VERIFIED',
-            ipAddress: req.ip,
-            userAgent: req.headers['user-agent'],
-            severity: 'info',
-        });
-
-        res.json({
-            accessToken,
-            user: {
-                id: user.id,
-                email: user.email,
-                role: user.role,
-                mfaEnabled: user.mfaEnabled,
-            },
-        });
-    } catch (err) {
-        next(err);
-    }
-});
-
-/**
- * DELETE /api/v1/security/mfa/disable
- * Disable MFA for the current user
- */
+// DELETE /api/v1/security/mfa/disable
 router.delete('/mfa/disable', authenticateToken, async (req, res, next) => {
     try {
         const userId = req.user.userId;
@@ -392,109 +361,4 @@ router.delete('/mfa/disable', authenticateToken, async (req, res, next) => {
     }
 });
 
-/**
- * DELETE /api/v1/security/sessions/:sessionId
- * Revoke a specific session
- */
-router.delete("/sessions/:sessionId", authenticateToken, async (req, res, next) => {
-    try {
-        const userId = req.user.userId;
-        const { sessionId } = req.params;
-
-        const session = await Session.findOne({
-            where: { id: sessionId, userId }
-        });
-
-        if (!session) {
-            return res.status(404).json({ error: "Session not found" });
-        }
-
-        await session.update({ isActive: false });
-
-        await AuditLog.create({
-            userId,
-            action: "SESSION_REVOKED",
-            details: `Session revoked: ${sessionId}`,
-            ipAddress: req.ip,
-            userAgent: req.headers["user-agent"],
-            severity: "info",
-        });
-
-        logger.info(`Session ${sessionId} revoked by user ${userId}`);
-
-        res.json({ message: "Session revoked successfully" });
-    } catch (err) {
-        next(err);
-    }
-});
-
-/**
- * DELETE /api/v1/security/sessions/:sessionId
- * Revoke a specific session
- */
-router.delete("/sessions/:sessionId", authenticateToken, async (req, res, next) => {
-    try {
-        const userId = req.user.userId;
-        const { sessionId } = req.params;
-
-        const session = await Session.findOne({
-            where: { id: sessionId, userId }
-        });
-
-        if (!session) {
-            return res.status(404).json({ error: "Session not found" });
-        }
-
-        await session.update({ isActive: false });
-
-        await AuditLog.create({
-            userId,
-            action: "SESSION_REVOKED",
-            details: `Session revoked: ${sessionId}`,
-            ipAddress: req.ip,
-            userAgent: req.headers["user-agent"],
-            severity: "info",
-        });
-
-        logger.info(`Session ${sessionId} revoked by user ${userId}`);
-
-        res.json({ message: "Session revoked successfully" });
-    } catch (err) {
-        next(err);
-    }
-});
-
 export default router;
-
-// DELETE /api/v1/security/sessions/:sessionId - Revoke session
-router.delete('/sessions/:sessionId', authenticateToken, async (req, res, next) => {
-    try {
-        const userId = req.user.userId;
-        const { sessionId } = req.params;
-
-        const session = await Session.findOne({
-            where: { id: sessionId, userId }
-        });
-
-        if (!session) {
-            return res.status(404).json({ error: 'Session not found' });
-        }
-
-        await session.update({ isActive: false });
-
-        await AuditLog.create({
-            userId,
-            action: 'SESSION_REVOKED',
-            details: `Session revoked: ${sessionId}`,
-            ipAddress: req.ip,
-            userAgent: req.headers['user-agent'],
-            severity: 'info',
-        });
-
-        logger.info(`Session ${sessionId} revoked by user ${userId}`);
-
-        res.json({ message: 'Session revoked successfully' });
-    } catch (err) {
-        next(err);
-    }
-});
