@@ -17,15 +17,20 @@ router.post('/register', async (req, res, next) => {
             return res.status(400).json({ error: 'Email and password required' });
         }
 
-        const { error } = await AuthService.register(email, password);
+        const result = await AuthService.register(email, password, username);
 
-        if (error) {
-            if (error.message.includes('already registered')) {
+        if (result.error) {
+            if (result.error.message.includes('already registered')) {
                 return res.status(409).json({ error: 'Email already registered' });
             }
-            return res.status(400).json({ error: error.message });
+            return res.status(400).json({ error: result.error.message });
         }
 
+        if (result.message) {
+            return res.status(200).json({ message: result.message });
+        }
+
+        // Update username if provided
         if (username) {
             await User.update({ username }, { where: { email } });
         }
@@ -38,43 +43,50 @@ router.post('/register', async (req, res, next) => {
     }
 });
 
-router.post("/verify-email", async (req, res, next) => {
+// POST /api/v1/auth/verify-email
+router.post('/verify-email', async (req, res, next) => {
     try {
         const { email, otp } = req.body;
         if (!email || !otp) {
-            return res.status(400).json({ error: "Email and OTP required" });
+            return res.status(400).json({ error: 'Email and OTP required' });
         }
+
         const result = await AuthService.verifyEmailOTP(email, otp);
         if (result.error) {
             return res.status(400).json({ error: result.error.message });
         }
-        res.json({ message: "Email verified successfully. You can now login." });
+
+        res.json({ message: 'Email verified successfully. You can now login.' });
     } catch (err) {
         next(err);
     }
 });
 
-router.post("/resend-otp", async (req, res, next) => {
+// POST /api/v1/auth/resend-otp
+router.post('/resend-otp', async (req, res, next) => {
     try {
         const { email } = req.body;
         if (!email) {
-            return res.status(400).json({ error: "Email required" });
+            return res.status(400).json({ error: 'Email required' });
         }
+
         const result = await AuthService.resendOTP(email);
         if (result.error) {
             return res.status(400).json({ error: result.error.message });
         }
-        res.json({ message: "OTP resent successfully" });
+
+        res.json({ message: 'OTP resent successfully' });
     } catch (err) {
         next(err);
     }
 });
 
+// POST /api/v1/auth/login
 router.post('/login', async (req, res, next) => {
     try {
         const { email, password } = req.body;
-        const ipAddress = req.ip;
-        const userAgent = req.headers['user-agent'];
+        const ipAddress = req.ip || 'unknown';
+        const userAgent = req.headers['user-agent'] || 'unknown';
 
         const session = await AuthService.login(email, password, ipAddress, userAgent);
 
@@ -112,13 +124,14 @@ router.post('/login', async (req, res, next) => {
     }
 });
 
+// GET /api/v1/auth/google
 router.get('/google', (req, res) => {
     const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${process.env.GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.GOOGLE_CALLBACK_URL)}&response_type=code&scope=profile email&access_type=offline&prompt=consent`;
     logger.info('🔄 Redirecting to Google OAuth');
     res.redirect(googleAuthUrl);
 });
 
-// FIXED: Google OAuth callback - Creates user WITHOUT password requirement
+// GET /api/v1/auth/google/callback
 router.get('/google/callback', async (req, res) => {
     try {
         const { code } = req.query;
@@ -199,6 +212,7 @@ router.get('/google/callback', async (req, res) => {
     }
 });
 
+// GET /api/v1/auth/me
 router.get('/me', authenticateToken, async (req, res, next) => {
     try {
         const user = await User.findByPk(req.user.userId, {
@@ -213,14 +227,60 @@ router.get('/me', authenticateToken, async (req, res, next) => {
     }
 });
 
-router.post("/logout", authenticateToken, async (req, res, next) => {
+// POST /api/v1/auth/logout
+router.post('/logout', authenticateToken, async (req, res, next) => {
     try {
         await Session.update(
             { isActive: false },
             { where: { userId: req.user.userId, isActive: true } }
         );
-        res.json({ message: "Logged out successfully" });
+        res.json({ message: 'Logged out successfully' });
     } catch (err) {
+        next(err);
+    }
+});
+
+// PATCH /api/v1/auth/setup-password - Set password for OAuth users
+router.patch('/setup-password', authenticateToken, async (req, res, next) => {
+    try {
+        const { password } = req.body;
+        const userId = req.user.userId;
+
+        if (!password) {
+            return res.status(400).json({ error: 'Password required' });
+        }
+
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Check if user already has password
+        if (!user.passwordHash || !user.passwordHash.startsWith('GOOGLE_OAUTH')) {
+            return res.status(400).json({ error: 'Password already set' });
+        }
+
+        const passwordHash = await bcrypt.hash(password, 12);
+
+        await user.update({
+            passwordHash,
+            // Add hasPassword field if your User model supports it
+            // hasPassword: true
+        });
+
+        await AuditLog.create({
+            userId: user.id,
+            action: 'PASSWORD_SETUP',
+            ipAddress: req.ip,
+            userAgent: req.headers['user-agent'],
+            severity: 'info',
+        });
+
+        logger.info(`Password setup completed for user: ${user.email}`);
+
+        res.json({ message: 'Password setup successful' });
+    } catch (err) {
+        logger.error('Password setup error:', err);
         next(err);
     }
 });
