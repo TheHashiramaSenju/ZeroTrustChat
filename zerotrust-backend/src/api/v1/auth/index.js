@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import { Router } from 'express';
 import AuthService from '../../../services/AuthService.js';
 import jwt from 'jsonwebtoken';

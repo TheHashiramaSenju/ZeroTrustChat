@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import { User, Session } from '../models/index.js';
 import logger from '../utils/logger.js';
 import AccountLockoutService from './AccountLockoutService.js';
