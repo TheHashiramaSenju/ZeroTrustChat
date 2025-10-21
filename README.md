@@ -1,4 +1,4 @@
-# 🔒 ZeroTrust: Secure Military Chat Application
+# 🔒 ZeroTrust: Secure Military Chat Application.
 
 [](https://www.google.com/search?q=LICENSE)
 
